@@ -53,22 +53,31 @@ public partial class ServerManager : Node
     // Pack and send GameSnapshot with all entities and their information
     private void BroadcastSnapshot()
     {
-        var snapshot = new NetMessage.GameSnapshot
-        {
-            Time = (int)Time.GetTicksMsec(),
-            States = new NetMessage.UserState[entityArray.Count]
-        };
+		var peers = this.Multiplayer.GetPeers();
 
-        for (int i = 0; i < entityArray.Count; i++)
-        {
-            var player = entityArray[i] as ServerPlayer; //player
-            snapshot.States[i] = player.GetCurrentState();
-        }
+		if (peers.Length == 0)
+			return;
 
-        byte[] data = MessagePackSerializer.Serialize<NetMessage.ICommand>(snapshot);
+		if (entityArray.Count > 0)
+		{
+			var snapshot = new NetMessage.GameSnapshot
+			{
+				Time = (int)Time.GetTicksMsec(),
+				States = new NetMessage.UserState[entityArray.Count]
+			};
 
-        _multiplayer.SendBytes(data, 0,
-            MultiplayerPeer.TransferModeEnum.UnreliableOrdered, 0);
+			for (int i = 0; i < entityArray.Count; i++)
+			{
+				var player = entityArray[i] as ServerPlayer; //player
+				if (GodotObject.IsInstanceValid(player))
+					snapshot.States[i] = player.GetCurrentState();
+			}
+
+			byte[] data = MessagePackSerializer.Serialize<NetMessage.ICommand>(snapshot);
+
+			_multiplayer.SendBytes(data, 0,
+				MultiplayerPeer.TransferModeEnum.UnreliableOrdered, 0);
+		}
     }
 
     private void OnPacketReceived(long id, byte[] data)
