@@ -15,6 +15,8 @@ public partial class ClientManager : Node
     private NetworkClock _netClock;
     private Node _entityArray;
 
+    private int ConnectionTimeElapsed = 0;
+
     // Debug only
     private double _sentPerSecond = 0, _recPerSecond = 0, _packetsPerSecond = 0, _sentPacketsPerSecond = 0;
 
@@ -31,8 +33,15 @@ public partial class ClientManager : Node
 
     public override void _Process(double delta)
     {
-        _snapshotInterpolator.InterpolateStates(_entityArray, NetworkClock.Clock);
-        DebugInfo(delta);
+        if (GetTree().GetMultiplayer().MultiplayerPeer is OfflineMultiplayerPeer)
+            return;
+
+        var ConStatus = this.Multiplayer.MultiplayerPeer.GetConnectionStatus();
+		if (ConStatus != MultiplayerPeer.ConnectionStatus.Connected || ConStatus == MultiplayerPeer.ConnectionStatus.Disconnected)
+			return;
+
+		_snapshotInterpolator.InterpolateStates(_entityArray, NetworkClock.Clock);
+		DebugInfo(delta);
     }
 
     private void OnPacketReceived(long id, byte[] data)
@@ -63,12 +72,54 @@ public partial class ClientManager : Node
         GetNode<Label>("Debug/Label").Text += $"\n{Multiplayer.GetUniqueId()}";
     }
 
+    private void OnConnectionFailed()
+	{
+		GD.Print($"ClientManager::OnConnectionFailed(): Connecting to: {_address}:{_port} has failed");
+		GetNode<Timer>("Timer").Stop();
+
+        GetTree().GetMultiplayer().MultiplayerPeer.Close();
+        GetTree().SetMultiplayer(MultiplayerApi.CreateDefaultInterface());
+	}
+
+    private void OnPeerConnected(long id)
+    {
+        GD.Print($">> ClientManager::OnPeerConnected(Node:{this.Name}): {id} / LocalId: {Multiplayer.GetUniqueId()} / NodeAuth: {GetMultiplayerAuthority()} ");
+    }
+
+    private void OnPeerDisconnected(long id)
+    {
+		GD.Print($">> ClientManager::OnPeerDisconnected(): {id} / LocalId: {Multiplayer.GetUniqueId()} ");
+    }
+
+    private async void OnServerDisconnected()
+	{
+		// ToDo: Quit and Stop all running processes
+		//_multiplayer = null;
+        //var state = GetTree().GetMultiplayer().MultiplayerPeer.GetConnectionStatus();
+        GetNode<Timer>("Timer").Stop();
+		GetTree().GetMultiplayer().MultiplayerPeer.Close();
+		//GetNode<Label>("Debug/Label").Modulate = Colors.Red;
+        GetTree().GetMultiplayer().MultiplayerPeer = new OfflineMultiplayerPeer();
+
+		GD.Print($">> ClientManager::OnServerDisconnected(): Server has closed the Connection");
+
+		await ToSignal(GetTree().CreateTimer(5), "timeout");
+
+		// Change to Mainmenu, instead of quit
+		GetTree().Quit();
+	}
+
     private void Connect()
     {
         _multiplayer.ConnectedToServer += OnConnectedToServer;
-        _multiplayer.PeerPacket += OnPacketReceived;
+		_multiplayer.PeerPacket += OnPacketReceived;
+		_multiplayer.ServerDisconnected += OnServerDisconnected;
+		_multiplayer.ConnectionFailed += OnConnectionFailed;
+		_multiplayer.PeerConnected += OnPeerConnected;
+		_multiplayer.PeerDisconnected += OnPeerDisconnected;
 
         ENetMultiplayerPeer peer = new ENetMultiplayerPeer();
+        
         peer.CreateClient(_address, _port);
         _multiplayer.MultiplayerPeer = peer;
         GetTree().SetMultiplayer(_multiplayer);
@@ -96,6 +147,26 @@ public partial class ClientManager : Node
 
     private void OnDebugTimerOut()
     {
+        if (GetTree().GetMultiplayer().MultiplayerPeer is OfflineMultiplayerPeer)
+            return;
+
+        var ConStatus = GetTree().GetMultiplayer().MultiplayerPeer.GetConnectionStatus();
+
+		if (ConStatus == MultiplayerPeer.ConnectionStatus.Connecting)
+		{
+			Label debug = GetNodeOrNull<Label>("Debug/Label");
+
+			if(debug != null)
+			{
+				debug.Text = $"Connecting ... ({ConnectionTimeElapsed})";
+			}
+
+			ConnectionTimeElapsed++;
+			return;
+		}
+		if (ConStatus == MultiplayerPeer.ConnectionStatus.Disconnected)
+			return;
+
         var enetHost = (Multiplayer.MultiplayerPeer as ENetMultiplayerPeer).Host;
         _sentPerSecond = enetHost.PopStatistic(ENetConnection.HostStatistic.SentData);
         _recPerSecond = enetHost.PopStatistic(ENetConnection.HostStatistic.ReceivedData);
