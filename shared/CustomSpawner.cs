@@ -15,12 +15,38 @@ public partial class CustomSpawner : MultiplayerSpawner
         this.SpawnFunction = customSpawnFunctionCallable;
 
         this.SetMultiplayerAuthority(Multiplayer.GetUniqueId());
+
+        var time = Time.GetDatetimeStringFromSystem(false, true);
+
+		GD.Print(time, " : ",
+			"MultiplayerSpawner::_Ready(): Callable this.SpawnFunction => :",
+			$"{this.GetParent().Name} / ",
+			$"{this.SpawnFunction.Method} / ",
+			$"{this.SpawnFunction.Target} / ",
+			$"{this.SpawnFunction.Target.GetType()} / ",
+			$"{this.SpawnFunction.Target.GetClass()}",
+			$"{this.SpawnFunction.Target.GetScript()} / "
+		);
     }
 
     private Node CustomSpawnFunction(Variant data)
     {
         int spawnedPlayerID = (int)data;
         int localID = Multiplayer.GetUniqueId();
+
+        GD.Print($">> MultiplayerSpawner::CustomSpawnFunction(): Local UniqueId: ({Multiplayer.GetUniqueId()} / Authority: {GetMultiplayerAuthority()})");
+
+        var time = Time.GetTicksMsec(); // GetDatetimeStringFromSystem(false, true);
+
+        GD.Print(time, 
+			": MultiplayerSpawner::_Ready(): Callable this.SpawnFunction => :",
+			$"\n\tMultiplayerAuthority of MultiplayerSpawner: {this.GetMultiplayerAuthority()} / ",
+			$"\n\tMethodName: {this.SpawnFunction.Method} / ",
+			$"\n\tTarget: {this.SpawnFunction.Target} / ",
+			$"\n\tGetType(): {this.SpawnFunction.Target.GetType()} / ",
+			$"\n\tGetClass(): {this.SpawnFunction.Target.GetClass()}",
+			$"\n\tGetScript(): {this.SpawnFunction.Target.GetScript()} / "
+		);
 
         // Server character for simulation
         if (localID == 1)
